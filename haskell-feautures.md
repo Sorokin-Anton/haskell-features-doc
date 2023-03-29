@@ -1,20 +1,29 @@
 # Features
 
-## Statically typed
 
-Every expression in Haskell has a type which is determined at compile time.
-All the types composed together by function application have to match up.
-If they don't, the program will be rejected by the compiler.
-Types become not only a form of guarantee,
-but a language for expressing the construction of programs.
+## Types that allow you to express the data flow
+
+Haskell has a static type system, which means the type of every expression is
+determined during the compilation, and no contradictions between the expected and
+real type can happen during the runtime.
+
+Sometimes, a static type system prevents you from writing reusable polymorphic
+code and forces you to write some boilerplate, but Haskell's type system
+is rich enough to describe the behavior of a polymorphic function.
+
+This allows you not only to check this behavior during the compile time
+but also to describe requirements for arguments, possible exceptions or
+side effects, and other properties of your function.
 
 ---------------------------------
-All Haskell values have a type:
+Each Haskell value has a type:
 
 ```haskell
-char = 'a'    :: Char
-int = 123     :: Int
-fun = isDigit :: Char -> Bool
+'a'           :: Char
+123           :: Int
+(5, "five")   :: (Int, String)
+isDigit       :: Char -> Bool           -- From Data.Char
+hash          :: Hashable a => a -> Int -- From Data.Hashable (package "hashable")
 ```
 
 You have to pass the right type of values to functions, or the compiler will reject the program:
@@ -24,21 +33,77 @@ You have to pass the right type of values to functions, or the compiler will rej
 a = isDigit 1
 ```
 
-You can decode bytes into text:
+`Hashable a` in the type of `hash` shows that you can hash a value of a restricted
+amount of types. By going to the definition of a `Hashable` type class, or just by trying to
+apply the `hash` to different values, we can conclude that e.g. `Int` and `String` are `Hashable`:
 
 ```haskell
-bytes = Crypto.Hash.SHA1.hash "hello" :: ByteString
-text = decodeUtf8 bytes               :: Text
+-- This compiles
+h1 = hash "str"
+h2 = hash 2000
 ```
 
-But you cannot decode Text, which is already a vector of Unicode points:
+`Char -> Bool` is not `Hashable`, so we can not accidentally try to hash a function or
+use functions as keys in `HashMap`:
 
 ```haskell
 -- Type error
-doubleDecode = decodeUtf8 (decodeUtf8 bytes)
+h3 = hash isDigit
 ```
 
-## Purely functional
+## Declarative code built from composable blocks
+
+Haskell's syntax and base libraries are designed for writing declarative code
+We can implement a function by combining some other functions without loops
+or mutable variables. This is less error-prone, and often much more compact.
+
+Type inference allows using polymorphic functions without specifying
+their types manually, which also increases the compactness of the code.
+
+Also, Haskell is lazy, which saves us from memory consumption for creating
+new objects during computation, and allows some functions to be effectively fused.
+
+---------------------------------
+This function calculates the euclidean norm of a vector
+stored as a list of floating-point numbers:
+
+```haskell
+norm :: [Double] -> Double
+norm v = sqrt (sum (map (^2) v))
+```
+
+The `(^2)` here is a partial application of the power operator `^`.
+While `a ^ b` is `a` in power `b`, `(^b)` is a function that raises something to power `b`,
+and `(a^)` is a function that raises `a` to a given power.
+
+`map` is a function that applies a given function to each element of a list.
+Generally, has type `(a -> b) -> [a] -> [b]`, and in this case it has type
+`(Double -> Double) -> [Double] -> [Double]`.
+Note that we haven't specified this
+specialized type manually, it was inferred by the compiler.
+
+While `map` returns a new list, we don't need to store it in memory, because we need
+only its sum. Because of lazy evaluation, the compiler is not forced to evaluate the
+subexpression `map (^2) v`, since we need only the sum of this list for further evaluation.
+`map` and `sum` will be fused here, so this code will have the same performance as
+a loop that goes through the list and adds up squares of its elements in a variable.
+
+We can rewrite this function using application and composition operators:
+
+```haskell
+norm2 v = sqrt $ sum $ map (^2) v
+norm3 = sqrt . sum . map (^2)
+```
+
+Note that `map` is partially applied in `norm3`. This is also useful if we want to do something
+with a nested list:
+
+```haskell
+hashAllElements :: [[String]] -> [[Int]]
+hashAllElements = map (map hash)
+```
+
+## Side effects are explicit
 
 Every function in Haskell is a function in the mathematical sense (i.e., "pure").
 Even side-effecting IO operations are but a description of what to do, produced by pure code.
@@ -119,9 +184,8 @@ do ss <- decode "[1,2,3]"
 ## Concurrent
 
 Haskell lends itself well to concurrent programming due to its explicit handling of effects.
-Its flagship compiler, GHC, comes with a high-performance parallel garbage collector and
-light-weight concurrency library
-containing a number of useful concurrency primitives and abstractions.
+Its flagship compiler, GHC, comes with a high-performance parallel garbage collector and\
+lightweight concurrency library containing several useful concurrency primitives and abstractions.
 
 ---------------------------------
 Easily launch threads and communicate with the standard library:
