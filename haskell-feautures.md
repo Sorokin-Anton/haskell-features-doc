@@ -1,6 +1,5 @@
 # Features
 
-
 ## Types that allow you to express the data flow
 
 Haskell has a static type system, which means the type of every expression is
@@ -105,34 +104,59 @@ hashAllElements = map (map hash)
 
 ## Side effects are explicit
 
-Every function in Haskell is a function in the mathematical sense (i.e., "pure").
-Even side-effecting IO operations are but a description of what to do, produced by pure code.
-There are no statements or instructions, only expressions which cannot mutate variables
-(local or global) nor access state like time or random numbers.
+By default, a function in Haskell is a function in the mathematical sense (i.e., "pure").
+
+If a function has any side effects e.g. writing to the terminal, obtaining random numbers,
+mutating some data structures, or sending HTTP requests, it is considered not as a function
+returning e.g. integer, but a function that returns a description of how to get this integer.
+This is indicated in the type of this function.
+
+If a function can return an exception instead of a result, or just exit without
+returning any result, it's also indicated in its type.
+
+If a function is pure, we're not worrying about possible problems caused by
+launching several functions simultaneously, interrupting its evaluation,
+incorrect environment setup, etc, so there are benefits from knowing that some
+function is definitely pure.
 
 ---------------------------------
-The following function takes an integer and returns an integer.
-By the type it cannot do any side-effects whatsoever, it cannot mutate any of its arguments.
+`readFile :: FilePath -> IO String` is a function that takes a path to a file and returns
+a process that reads from this file.
+The only `IO` process that is really launched is `main`, so we need to insert our process into
+the main process if we want it to be executed. The simplest way to do this is to use a `do`-block.
+The following program gets a path to file in stdin and prints its size:
 
 ```haskell
-square :: Int -> Int
-square x = x * x
+main = do
+  path <- getLine
+  contents <- readFile path
+  print (length contents)
 ```
 
-The following string concatenation is okay:
+Note that `readFile getLine` or `length (readFile path)` would cause a type error because
+`readFile` and `length` expect a string, not a process of obtaining one.
+
+Another possible side effect that function can have is the possibility of failing the computation,
+i.e. returning no result. For example `Text.Read.readMaybe` that can be used to parse
+an integer from a string has type `String -> Maybe Integer`, so its result can be either
+some integer (wrapped in `Just`) or `Nothing`.
+
+Because of this, we can't write `readMaybe str * x` (it'll cause a type error), and we need to consider both cases when
+using a result of this function, e.g. `fromMaybe 0 (readMaybe str) * x` says that we should use `0`
+if parsing failed, and
 
 ```haskell
-"Hello: " ++ "World!"
+case readMaybe str of
+  Nothing -> 0
+  Just n -> n * x
 ```
 
-The following string concatenation is a type error:
+is an explicit branching.
 
-```haskell
--- Type error
-"Name: " ++ getLine
-```
+Separating things like `String`, `Maybe String` and `IO String` allow us to quickly understand
+possible outcomes of calling a function.
 
-Because getLine has type IO String and not String, like "Name: " is. So by the type system you cannot mix and match purity with impurity.
+Also, the `IO` type solves the problem of the order of executing IO operations in lazy code.
 
 ## Type inference
 
